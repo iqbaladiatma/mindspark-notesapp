@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindSpark - Aplikasi Catatan + AI</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- jsPDF for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        /* Custom scrollbar for a more modern look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; /* bg-gray-800 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563; /* bg-gray-600 */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; /* bg-gray-500 */
+        }
+        .note-content-editor {
+            height: calc(100vh - 200px); /* Adjust height dynamically */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans antialiased">
+
+    <div id="app" class="flex h-screen">
+
+        <!-- Sidebar -->
+        <aside class="w-1/3 lg:w-1/4 bg-gray-800 p-4 flex flex-col border-r border-gray-700">
+            <header class="mb-6">
+                <h1 class="text-2xl font-bold text-white flex items-center">
+                    <i class="fas fa-lightbulb text-teal-400 mr-2"></i> MindSpark
+                </h1>
+                <p class="text-sm text-gray-400">Catatan Cerdas Anda</p>
+            </header>
+
+            <button id="new-note-btn" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center shadow-lg">
+                <i class="fas fa-plus mr-2"></i> Catatan Baru
+            </button>
+
+            <div class="mt-6 flex-grow overflow-y-auto">
+                <h2 class="text-lg font-semibold text-gray-300 mb-2">Semua Catatan</h2>
+                <div id="notes-list">
+                    <!-- Daftar catatan akan dirender di sini oleh JavaScript -->
+                    <p class="text-gray-500">Memuat catatan...</p>
+                </div>
+            </div>
+            
+            <!-- API Key Settings -->
+            <div class="mt-auto pt-4 border-t border-gray-700">
+                <h3 class="text-md font-semibold text-gray-300 mb-2">Pengaturan API</h3>
+                <div class="space-y-2">
+                    <label for="api-key-input" class="text-sm text-gray-400">Kunci API Gemini Anda</label>
+                    <div class="flex space-x-2">
+                        <input type="password" id="api-key-input" placeholder="Masukkan kunci API..." class="w-full bg-gray-700 text-gray-200 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm">
+                        <button id="save-api-key-btn" title="Simpan Kunci API" class="bg-teal-500 hover:bg-teal-600 text-white font-bold p-2 rounded-lg transition-colors duration-200 flex items-center justify-center">
+                            <i class="fas fa-save"></i>
+                        </button>
+                    </div>
+                    <p id="api-key-status" class="text-xs text-teal-400 h-4"></p>
+                </div>
+            </div>
+
+            <div class="mt-4 text-xs text-gray-500">
+                <p>User ID: <span id="user-id-display">...</span></p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main id="main-content" class="w-2/3 lg:w-3/4 p-6 flex flex-col bg-gray-900">
+            <!-- Welcome Screen -->
+            <div id="welcome-screen" class="flex flex-col items-center justify-center h-full text-center">
+                <i class="fas fa-file-alt text-7xl text-gray-600 mb-4"></i>
+                <h2 class="text-3xl font-bold text-white">Selamat Datang di MindSpark</h2>
+                <p class="text-gray-400 mt-2">Pilih catatan dari sidebar atau buat yang baru untuk memulai.</p>
+            </div>
+
+            <!-- Note Editor (hidden by default) -->
+            <div id="note-editor" class="hidden h-full flex flex-col">
+                <div class="flex-shrink-0 flex justify-between items-center mb-4">
+                     <input type="text" id="note-title" placeholder="Judul Catatan..." class="w-full bg-transparent text-4xl font-bold text-white focus:outline-none">
+                     <button id="delete-note-btn" class="text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full">
+                        <i class="fas fa-trash-alt fa-lg"></i>
+                    </button>
+                </div>
+
+                <!-- Toolbar -->
+                <div class="flex-shrink-0 bg-gray-800 p-2 rounded-lg mb-4 flex items-center space-x-2">
+                    <button id="get-idea-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md transition-colors flex items-center">
+                        <i class="fas fa-wand-magic-sparkles mr-2"></i>
+                        <span id="idea-btn-text">Dapatkan Ide</span>
+                        <i id="idea-loader" class="fas fa-spinner fa-spin ml-2 hidden"></i>
+                    </button>
+                    <div class="flex-grow"></div>
+                    <button id="export-md-btn" class="bg-gray-600 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-md transition-colors flex items-center">
+                        <i class="fab fa-markdown mr-2"></i> Ekspor .md
+                    </button>
+                    <button id="export-pdf-btn" class="bg-gray-600 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-md transition-colors flex items-center">
+                        <i class="fas fa-file-pdf mr-2"></i> Ekspor .pdf
+                    </button>
+                </div>
+
+                <textarea id="note-content" placeholder="Mulai tulis di sini..." class="note-content-editor w-full h-full bg-gray-900 text-gray-300 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none leading-relaxed"></textarea>
+            </div>
+        </main>
+    </div>
+
+    <!-- Custom Modals -->
+    <div id="delete-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-8 shadow-2xl max-w-sm w-full">
+            <h3 class="text-xl font-bold text-white mb-4">Konfirmasi Hapus</h3>
+            <p class="text-gray-300 mb-6">Apakah Anda yakin ingin menghapus catatan ini secara permanen?</p>
+            <div class="flex justify-end space-x-4">
+                <button id="cancel-delete-btn" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors">Batal</button>
+                <button id="confirm-delete-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Hapus</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="api-key-prompt-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-8 shadow-2xl max-w-sm w-full">
+            <h3 class="text-xl font-bold text-white mb-4">Kunci API Dibutuhkan</h3>
+            <p class="text-gray-300 mb-6">Silakan masukkan Kunci API Gemini Anda di pengaturan sidebar untuk menggunakan fitur ide AI.</p>
+            <div class="flex justify-end">
+                <button id="close-api-prompt-btn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Mengerti</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Firebase and App Logic -->
+    <script type="module">
+        // Import fungsi yang diperlukan dari Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, onSnapshot, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- KONFIGURASI FIREBASE ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'mindspark-default';
+
+        // Inisialisasi Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // --- VARIABEL GLOBAL & DOM ELEMENTS ---
+        let notes = [];
+        let activeNoteId = null;
+        let userId = null;
+        let notesCollectionRef;
+
+        const notesListEl = document.getElementById('notes-list');
+        const newNoteBtn = document.getElementById('new-note-btn');
+        const noteTitleEl = document.getElementById('note-title');
+        const noteContentEl = document.getElementById('note-content');
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const noteEditor = document.getElementById('note-editor');
+        const deleteNoteBtn = document.getElementById('delete-note-btn');
+        const getIdeaBtn = document.getElementById('get-idea-btn');
+        const ideaBtnText = document.getElementById('idea-btn-text');
+        const ideaLoader = document.getElementById('idea-loader');
+        const exportMdBtn = document.getElementById('export-md-btn');
+        const exportPdfBtn = document.getElementById('export-pdf-btn');
+        const userIdDisplay = document.getElementById('user-id-display');
+        
+        // API Key Elements
+        const apiKeyInput = document.getElementById('api-key-input');
+        const saveApiKeyBtn = document.getElementById('save-api-key-btn');
+        const apiKeyStatus = document.getElementById('api-key-status');
+        
+        // Modal elements
+        const deleteModal = document.getElementById('delete-modal');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        const apiKeyPromptModal = document.getElementById('api-key-prompt-modal');
+        const closeApiPromptBtn = document.getElementById('close-api-prompt-btn');
+
+        // --- FUNGSI DEBOUNCE ---
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        // --- AUTENTIKASI & INISIALISASI DATA ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                userIdDisplay.textContent = userId;
+                notesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/notes`);
+                listenForNotes();
+            }
+        });
+        
+        (async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Authentication failed:", error);
+            }
+        })();
+
+        // --- PENGATURAN API KEY ---
+        function saveApiKey() {
+            const key = apiKeyInput.value.trim();
+            if (key) {
+                localStorage.setItem('geminiApiKey', key);
+                apiKeyStatus.textContent = 'Kunci API tersimpan!';
+                setTimeout(() => { apiKeyStatus.textContent = ''; }, 3000);
+            }
+        }
+
+        function loadApiKey() {
+            const key = localStorage.getItem('geminiApiKey');
+            if (key) {
+                apiKeyInput.value = key;
+            }
+        }
+
+        // --- RENDER LOGIC ---
+        function renderNotesList() {
+            if (!notesCollectionRef) return;
+            notesListEl.innerHTML = '';
+            if (notes.length === 0) {
+                notesListEl.innerHTML = '<p class="text-gray-500 text-sm p-2">Belum ada catatan. Buat yang baru!</p>';
+                return;
+            }
+            const sortedNotes = [...notes].sort((a, b) => (b.updatedAt?.toDate() || 0) - (a.updatedAt?.toDate() || 0));
+            sortedNotes.forEach(note => {
+                const item = document.createElement('div');
+                item.dataset.id = note.id;
+                item.className = `p-3 rounded-lg cursor-pointer mb-2 transition-colors duration-200 ${note.id === activeNoteId ? 'bg-teal-600' : 'hover:bg-gray-700'}`;
+                const title = document.createElement('h3');
+                title.textContent = note.title || 'Catatan Tanpa Judul';
+                title.className = 'font-bold text-white truncate';
+                const preview = document.createElement('p');
+                preview.textContent = note.content.substring(0, 40) + (note.content.length > 40 ? '...' : '');
+                preview.className = 'text-sm text-gray-400 truncate';
+                item.appendChild(title);
+                item.appendChild(preview);
+                item.addEventListener('click', () => handleNoteSelect(note.id));
+                notesListEl.appendChild(item);
+            });
+        }
+
+        function renderActiveNote() {
+            if (!activeNoteId) {
+                welcomeScreen.style.display = 'flex';
+                noteEditor.style.display = 'none';
+                return;
+            }
+            const note = notes.find(n => n.id === activeNoteId);
+            if (note) {
+                welcomeScreen.style.display = 'none';
+                noteEditor.style.display = 'flex';
+                noteTitleEl.value = note.title;
+                noteContentEl.value = note.content;
+            } else {
+                activeNoteId = null;
+                renderActiveNote();
+            }
+        }
+
+        // --- EVENT HANDLERS & DATA MANIPULATION ---
+        function handleNoteSelect(id) {
+            activeNoteId = id;
+            renderNotesList();
+            renderActiveNote();
+        }
+
+        async function handleNewNote() {
+            if (!notesCollectionRef) return;
+            const newNote = {
+                title: 'Catatan Baru',
+                content: '',
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            };
+            try {
+                const docRef = await addDoc(notesCollectionRef, newNote);
+                activeNoteId = docRef.id;
+            } catch (error) {
+                console.error("Error adding document: ", error);
+            }
+        }
+
+        const handleNoteUpdate = debounce(async () => {
+            if (!activeNoteId || !notesCollectionRef) return;
+            const noteRef = doc(db, `artifacts/${appId}/users/${userId}/notes`, activeNoteId);
+            const updatedData = {
+                title: noteTitleEl.value,
+                content: noteContentEl.value,
+                updatedAt: serverTimestamp()
+            };
+            try {
+                await updateDoc(noteRef, updatedData);
+            } catch (error) {
+                console.error("Error updating document: ", error);
+            }
+        }, 500);
+
+        async function handleDeleteNote() {
+            if (!activeNoteId || !notesCollectionRef) return;
+            const noteRef = doc(db, `artifacts/${appId}/users/${userId}/notes`, activeNoteId);
+            try {
+                await deleteDoc(noteRef);
+                activeNoteId = null;
+            } catch (error) {
+                console.error("Error deleting document: ", error);
+            } finally {
+                closeDeleteModal();
+            }
+        }
+
+        function openDeleteModal() { deleteModal.style.display = 'flex'; }
+        function closeDeleteModal() { deleteModal.style.display = 'none'; }
+        function openApiPromptModal() { apiKeyPromptModal.style.display = 'flex'; }
+        function closeApiPromptModal() { apiKeyPromptModal.style.display = 'none'; }
+
+        // --- FITUR EKSTRA ---
+        async function getIdeaFromAI() {
+            const apiKey = localStorage.getItem('geminiApiKey');
+            if (!apiKey) {
+                openApiPromptModal();
+                return;
+            }
+            if (!activeNoteId) {
+                // Seharusnya tidak terjadi jika tombol aktif, tapi sebagai pengaman
+                alert("Pilih atau buat catatan terlebih dahulu.");
+                return;
+            }
+            
+            ideaLoader.classList.remove('hidden');
+            ideaBtnText.textContent = 'Meminta ide...';
+            getIdeaBtn.disabled = true;
+
+            const currentContent = noteContentEl.value;
+            const prompt = currentContent.trim() === '' 
+                ? "Berikan saya sebuah ide atau kalimat pembuka yang menarik untuk sebuah cerita atau esai dalam Bahasa Indonesia."
+                : `Berdasarkan teks berikut, berikan sebuah ide atau paragraf lanjutan yang kreatif dan relevan dalam Bahasa Indonesia. Teks: "${currentContent}"`;
+
+            try {
+                const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                const payload = { contents: chatHistory };
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API Error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0) {
+                    const generatedText = result.candidates[0].content.parts[0].text;
+                    noteContentEl.value += `\n\n---\n*Ide dari AI:*\n${generatedText}\n`;
+                    handleNoteUpdate();
+                } else {
+                    throw new Error("Respon AI tidak valid atau kosong.");
+                }
+
+            } catch (error) {
+                console.error("Error getting idea from AI:", error);
+                noteContentEl.value += `\n\n[Gagal mendapatkan ide dari AI: ${error.message}. Periksa kunci API dan koneksi Anda.]`;
+            } finally {
+                ideaLoader.classList.add('hidden');
+                ideaBtnText.textContent = 'Dapatkan Ide';
+                getIdeaBtn.disabled = false;
+            }
+        }
+
+        function exportToMarkdown() {
+            if (!activeNoteId) return;
+            const note = notes.find(n => n.id === activeNoteId);
+            if (!note) return;
+            const markdownContent = `# ${note.title}\n\n${note.content}`;
+            const blob = new Blob([markdownContent], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${note.title.replace(/ /g, '_')}.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function exportToPDF() {
+            if (!activeNoteId) return;
+            const note = notes.find(n => n.id === activeNoteId);
+            if (!note) return;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFontSize(22);
+            doc.text(note.title, 10, 20);
+            doc.setFontSize(12);
+            const splitText = doc.splitTextToSize(note.content, 180);
+            doc.text(splitText, 10, 30);
+            doc.save(`${note.title.replace(/ /g, '_')}.pdf`);
+        }
+
+        // --- FIRESTORE LISTENER ---
+        function listenForNotes() {
+            if (!notesCollectionRef) return;
+            onSnapshot(notesCollectionRef, (snapshot) => {
+                const newNotes = [];
+                snapshot.forEach(doc => {
+                    newNotes.push({ id: doc.id, ...doc.data() });
+                });
+                notes = newNotes;
+                renderNotesList();
+                renderActiveNote();
+            }, (error) => {
+                console.error("Error listening for notes:", error);
+            });
+        }
+
+        // --- EVENT LISTENERS INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', loadApiKey);
+        newNoteBtn.addEventListener('click', handleNewNote);
+        noteTitleEl.addEventListener('input', handleNoteUpdate);
+        noteContentEl.addEventListener('input', handleNoteUpdate);
+        deleteNoteBtn.addEventListener('click', openDeleteModal);
+        
+        // API Key Listeners
+        saveApiKeyBtn.addEventListener('click', saveApiKey);
+        
+        // Modal listeners
+        cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+        confirmDeleteBtn.addEventListener('click', handleDeleteNote);
+        closeApiPromptBtn.addEventListener('click', closeApiPromptModal);
+
+        // Extra features listeners
+        getIdeaBtn.addEventListener('click', getIdeaFromAI);
+        exportMdBtn.addEventListener('click', exportToMarkdown);
+        exportPdfBtn.addEventListener('click', exportToPDF);
+
+    </script>
+</body>
+</html>
